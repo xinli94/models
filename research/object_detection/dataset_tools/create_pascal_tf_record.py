@@ -27,7 +27,7 @@ from __future__ import print_function
 
 import hashlib
 import io
-import logging
+from tensorflow.python.platform import tf_logging as logging
 import os
 
 from lxml import etree

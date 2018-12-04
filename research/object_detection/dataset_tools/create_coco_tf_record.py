@@ -138,6 +138,7 @@ def create_tf_example(image,
     xmax.append(float(x + width) / image_width)
     ymin.append(float(y) / image_height)
     ymax.append(float(y + height) / image_height)
+
     is_crowd.append(object_annotations['iscrowd'])
     category_id = int(object_annotations['category_id'])
     category_ids.append(category_id)
@@ -232,6 +233,8 @@ def _create_tf_record_from_coco_annotations(
 
     total_num_annotations_skipped = 0
     for idx, image in enumerate(images):
+      # tf.logging.info('On image %d of %d', idx, len(images))
+      # tf.logging.info('>>>> %s', image)
       if idx % 100 == 0:
         tf.logging.info('On image %d of %d', idx, len(images))
       annotations_list = annotations_index[image['id']]

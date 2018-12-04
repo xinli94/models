@@ -15,7 +15,7 @@
 
 """Label map utility functions."""
 
-import logging
+from tensorflow.python.platform import tf_logging as logging
 
 import tensorflow as tf
 from google.protobuf import text_format

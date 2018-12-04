@@ -14,7 +14,7 @@
 # ==============================================================================
 """Common utility functions for evaluation."""
 import collections
-import logging
+from tensorflow.python.platform import tf_logging as logging
 import os
 import time
 
@@ -30,6 +30,10 @@ from object_detection.utils import label_map_util
 from object_detection.utils import ops
 from object_detection.utils import visualization_utils as vis_utils
 
+from object_detection.nms import gpu_nms
+from PIL import Image
+import pandas as pd
+
 slim = tf.contrib.slim
 
 # A dictionary of metric names to classes that implement the metric. The classes
@@ -44,6 +48,27 @@ EVAL_METRICS_CLASS_DICT = {
 
 EVAL_DEFAULT_METRIC = 'coco_detection_metrics'
 
+######################################################
+NMS_THRESH = 0.3
+OUTPUT_FILE = '/data5/xin/irv2_atrous/output_test2.csv'
+
+def run_nms(detection_boxes, detection_scores, detection_classes):
+  combined = sorted(zip(detection_boxes, detection_scores, detection_classes), key=lambda x:x[2])
+  combined_map = collections.defaultdict(list)
+  for box, score, classid in combined:
+    combined_map[classid].append(list(box) + [score])
+  # per class nms
+  result_detection_boxes, result_detection_scores, result_detection_classes = [], [], []
+  for key, vals in combined_map.iteritems():
+    vals = np.array(vals).astype(np.float32)
+    keep = gpu_nms.gpu_nms(vals, NMS_THRESH)
+    vals = vals[keep, :]
+    for val in vals:
+      result_detection_boxes.append(val[:4])
+      result_detection_scores.append(val[-1])
+      result_detection_classes.append(int(key))
+  return np.array(result_detection_boxes), np.array(result_detection_scores), np.array(result_detection_classes)
+######################################################
 
 def write_metrics(metrics, global_step, summary_dir):
   """Write metrics to a summary directory.
@@ -209,6 +234,7 @@ def visualize_detection_results(result_dict,
 
 
 def _run_checkpoint_once(tensor_dict,
+                         categories,
                          evaluators=None,
                          batch_processor=None,
                          checkpoint_dirs=None,
@@ -288,6 +314,11 @@ def _run_checkpoint_once(tensor_dict,
 
   counters = {'skipped': 0, 'success': 0}
   aggregate_result_losses_dict = collections.defaultdict(list)
+
+  categories_dict = {}
+  for item in categories:
+    categories_dict[item['id']] = item['name']
+
   with tf.contrib.slim.queues.QueueRunners(sess):
     try:
       for batch in range(int(num_batches)):
@@ -309,6 +340,30 @@ def _run_checkpoint_once(tensor_dict,
               tensor_dict, sess, batch, counters, losses_dict=losses_dict)
         if not result_dict:
           continue
+
+        ######################################################
+        detection_boxes, detection_scores, detection_classes = run_nms(
+        result_dict['detection_boxes'],
+        result_dict['detection_scores'],
+        result_dict['detection_classes'])
+
+        image_path = '/data1/xin/pipeline_brand_classifier/hive_test/data/' + result_dict['filename']
+        image = Image.open(image_path)
+        im_width, im_height = image.size
+
+        n = len(detection_scores)
+        records = []
+        for idx in range(n):
+          top, left, bottom, right = detection_boxes[idx]
+          score = detection_scores[idx]
+          classname = categories_dict[detection_classes[idx]]
+          records.append([image_path, 0, im_width, im_height, int(left), int(top), int(right), int(bottom), score, classname])
+
+        records_df = pd.DataFrame.from_records(records, columns=['path', 'timestamp', 'width', 'height', 'left', 'top', 'right', 'bottom', 'score', 'class'])
+        records_df.to_csv(OUTPUT_FILE, mode='a', index=False, header=False)
+        # print('>>>>>>>>>>>>>>>>> result_dict', result_dict)
+        ######################################################
+
         for key, value in iter(result_losses_dict.items()):
           aggregate_result_losses_dict[key].append(value)
         for evaluator in evaluators:
@@ -345,6 +400,7 @@ def _run_checkpoint_once(tensor_dict,
 # TODO(rathodv): Add tests.
 def repeated_checkpoint_run(tensor_dict,
                             summary_dir,
+                            categories,
                             evaluators,
                             batch_processor=None,
                             checkpoint_dirs=None,
@@ -428,7 +484,9 @@ def repeated_checkpoint_run(tensor_dict,
                    'seconds', eval_interval_secs)
     else:
       last_evaluated_model_path = model_path
-      global_step, metrics = _run_checkpoint_once(tensor_dict, evaluators,
+      global_step, metrics = _run_checkpoint_once(tensor_dict,
+                                                  categories,
+                                                  evaluators,
                                                   batch_processor,
                                                   checkpoint_dirs,
                                                   variables_to_restore,
@@ -452,6 +510,7 @@ def repeated_checkpoint_run(tensor_dict,
 
 def result_dict_for_single_example(image,
                                    key,
+                                   filename,
                                    detections,
                                    groundtruth=None,
                                    class_agnostic=False,
@@ -514,6 +573,7 @@ def result_dict_for_single_example(image,
   output_dict = {
       input_data_fields.original_image: image,
       input_data_fields.key: key,
+      input_data_fields.filename: filename
   }
 
   detection_fields = fields.DetectionResultFields

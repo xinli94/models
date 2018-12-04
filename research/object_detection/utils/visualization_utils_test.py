@@ -14,7 +14,7 @@
 # ==============================================================================
 
 """Tests for object_detection.utils.visualization_utils."""
-import logging
+from tensorflow.python.platform import tf_logging as logging
 import os
 
 import numpy as np

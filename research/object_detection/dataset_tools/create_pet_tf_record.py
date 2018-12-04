@@ -28,7 +28,7 @@ Example usage:
 
 import hashlib
 import io
-import logging
+from tensorflow.python.platform import tf_logging as logging
 import os
 import random
 import re

@@ -18,7 +18,7 @@ This file provides a generic evaluation method that can be used to evaluate a
 DetectionModel.
 """
 
-import logging
+from tensorflow.python.platform import tf_logging as logging
 import tensorflow as tf
 
 from object_detection import eval_util
@@ -119,6 +119,7 @@ def _extract_predictions_and_losses(model,
   result_dict = eval_util.result_dict_for_single_example(
       original_image,
       input_dict[fields.InputDataFields.source_id],
+      input_dict[fields.InputDataFields.filename],
       detections,
       groundtruth,
       class_agnostic=(
@@ -260,8 +261,9 @@ def evaluate(create_input_dict_fn, create_model_fn, eval_config, categories,
   metrics = eval_util.repeated_checkpoint_run(
       tensor_dict=tensor_dict,
       summary_dir=eval_dir,
+      categories=categories,
       evaluators=evaluator_list,
-      batch_processor=_process_batch,
+      # batch_processor=_process_batch,
       checkpoint_dirs=[checkpoint_dir],
       variables_to_restore=None,
       restore_fn=_restore_latest_checkpoint,

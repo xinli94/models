@@ -15,7 +15,7 @@
 
 """Helper functions for manipulating collections of variables during training.
 """
-import logging
+from tensorflow.python.platform import tf_logging as logging
 import re
 
 import tensorflow as tf

@@ -30,7 +30,7 @@ Note: This module operates on numpy boxes and box lists.
 from abc import ABCMeta
 from abc import abstractmethod
 import collections
-import logging
+from tensorflow.python.platform import tf_logging as logging
 import unicodedata
 import numpy as np
 

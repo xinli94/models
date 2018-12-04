@@ -29,7 +29,7 @@ Note2: This module operates on numpy boxes and box lists.
 
 from abc import abstractmethod
 import collections
-import logging
+from tensorflow.python.platform import tf_logging as logging
 import numpy as np
 
 from object_detection.core import standard_fields
