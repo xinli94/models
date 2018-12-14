@@ -51,7 +51,7 @@ EVAL_DEFAULT_METRIC = 'coco_detection_metrics'
 
 ######################################################
 NMS_THRESH = 0.3
-OUTPUT_FILE = '/data5/xin/irv2_atrous/output_test2.csv'
+OUTPUT_FILE = '/data5/xin/output.csv'
 
 def run_nms(detection_boxes, detection_scores, detection_classes):
   combined = sorted(zip(detection_boxes, detection_scores, detection_classes), key=lambda x:x[2])
@@ -236,7 +236,7 @@ def visualize_detection_results(result_dict,
 
 
 def _run_checkpoint_once(tensor_dict,
-                         categories,
+                         # categories,
                          evaluators=None,
                          batch_processor=None,
                          checkpoint_dirs=None,
@@ -320,9 +320,9 @@ def _run_checkpoint_once(tensor_dict,
   counters = {'skipped': 0, 'success': 0}
   aggregate_result_losses_dict = collections.defaultdict(list)
 
-  categories_dict = {}
-  for item in categories:
-    categories_dict[item['id']] = item['name']
+  # categories_dict = {}
+  # for item in categories:
+  #   categories_dict[item['id']] = item['name']
 
   with tf.contrib.slim.queues.QueueRunners(sess):
     try:
@@ -347,28 +347,28 @@ def _run_checkpoint_once(tensor_dict,
         if not result_dict:
           continue
 
-        ######################################################
-        detection_boxes, detection_scores, detection_classes = run_nms(
-        result_dict['detection_boxes'],
-        result_dict['detection_scores'],
-        result_dict['detection_classes'])
+        # ######################################################
+        # detection_boxes, detection_scores, detection_classes = run_nms(
+        # result_dict['detection_boxes'],
+        # result_dict['detection_scores'],
+        # result_dict['detection_classes'])
 
-        image_path = '/data1/xin/pipeline_brand_classifier/hive_test/data/' + result_dict['filename']
-        image = Image.open(image_path)
-        im_width, im_height = image.size
+        # image_path = '/data1/xin/pipeline_brand_classifier/hive_test/data/' + result_dict['filename']
+        # image = Image.open(image_path)
+        # im_width, im_height = image.size
 
-        n = len(detection_scores)
-        records = []
-        for idx in range(n):
-          top, left, bottom, right = detection_boxes[idx]
-          score = detection_scores[idx]
-          classname = categories_dict[detection_classes[idx]]
-          records.append([image_path, 0, im_width, im_height, int(left), int(top), int(right), int(bottom), score, classname])
+        # n = len(detection_scores)
+        # records = []
+        # for idx in range(n):
+        #   top, left, bottom, right = detection_boxes[idx]
+        #   score = detection_scores[idx]
+        #   classname = categories_dict[detection_classes[idx]]
+        #   records.append([image_path, 0, im_width, im_height, int(left), int(top), int(right), int(bottom), score, classname])
 
-        records_df = pd.DataFrame.from_records(records, columns=['path', 'timestamp', 'width', 'height', 'left', 'top', 'right', 'bottom', 'score', 'class'])
-        records_df.to_csv(OUTPUT_FILE, mode='a', index=False, header=False)
-        # print('>>>>>>>>>>>>>>>>> result_dict', result_dict)
-        ######################################################
+        # records_df = pd.DataFrame.from_records(records, columns=['path', 'timestamp', 'width', 'height', 'left', 'top', 'right', 'bottom', 'score', 'class'])
+        # records_df.to_csv(OUTPUT_FILE, mode='a', index=False, header=False)
+        # # print('>>>>>>>>>>>>>>>>> result_dict', result_dict)
+        # ######################################################
 
         for key, value in iter(result_losses_dict.items()):
           aggregate_result_losses_dict[key].append(value)
@@ -420,7 +420,7 @@ def _run_checkpoint_once(tensor_dict,
 # TODO(rathodv): Add tests.
 def repeated_checkpoint_run(tensor_dict,
                             summary_dir,
-                            categories,
+                            # categories,
                             evaluators,
                             batch_processor=None,
                             checkpoint_dirs=None,
@@ -565,7 +565,7 @@ def _scale_keypoint_to_absolute(args):
 
 def result_dict_for_single_example(image,
                                    key,
-                                   filename,
+                                   # filename,
                                    detections,
                                    groundtruth=None,
                                    class_agnostic=False,
@@ -636,6 +636,7 @@ def result_dict_for_single_example(image,
 
   batched_output_dict = result_dict_for_batched_example(
       image,
+      # filename,
       tf.expand_dims(key, 0),
       detections,
       groundtruth,
@@ -663,6 +664,7 @@ def result_dict_for_single_example(image,
 
 
 def result_dict_for_batched_example(images,
+                                    # filename,
                                     keys,
                                     detections,
                                     groundtruth=None,
@@ -757,7 +759,7 @@ def result_dict_for_batched_example(images,
           '[batch_size, 2].')
 
   output_dict = {
-      input_data_fields.filename: filename
+      # input_data_fields.filename: filename,
       input_data_fields.original_image: images,
       input_data_fields.key: keys,
       input_data_fields.original_image_spatial_shape: (

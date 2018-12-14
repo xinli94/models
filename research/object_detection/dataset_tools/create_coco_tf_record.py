@@ -38,6 +38,7 @@ import os
 import contextlib2
 import numpy as np
 import PIL.Image
+from tqdm import tqdm
 
 from pycocotools import mask
 import tensorflow as tf
@@ -46,6 +47,8 @@ from object_detection.dataset_tools import tf_record_creation_util
 from object_detection.utils import dataset_util
 from object_detection.utils import label_map_util
 
+import warnings
+warnings.filterwarnings("error")
 
 flags = tf.app.flags
 tf.flags.DEFINE_boolean('include_masks', False,
@@ -64,6 +67,10 @@ tf.flags.DEFINE_string('val_annotations_file', '',
 tf.flags.DEFINE_string('testdev_annotations_file', '',
                        'Test-dev annotations JSON file.')
 tf.flags.DEFINE_string('output_dir', '/tmp/', 'Output data directory.')
+tf.flags.DEFINE_integer('num_shards_train', 100,
+                        'The number of shards to split train set into')
+tf.flags.DEFINE_integer('num_shards_val', 10,
+                        'The number of shards to split val/test set into')
 
 FLAGS = flags.FLAGS
 
@@ -127,6 +134,7 @@ def create_tf_example(image,
   encoded_mask_png = []
   num_annotations_skipped = 0
   for object_annotations in annotations_list:
+    # print('>>>>>>>>>>>> object_annotations', object_annotations)
     (x, y, width, height) = tuple(object_annotations['bbox'])
     if width <= 0 or height <= 0:
       num_annotations_skipped += 1
@@ -232,16 +240,24 @@ def _create_tf_record_from_coco_annotations(
                     missing_annotation_count)
 
     total_num_annotations_skipped = 0
-    for idx, image in enumerate(images):
+    skip_count = 0
+    for idx, image in enumerate(tqdm(images)):
       # tf.logging.info('On image %d of %d', idx, len(images))
       # tf.logging.info('>>>> %s', image)
-      if idx % 100 == 0:
-        tf.logging.info('On image %d of %d', idx, len(images))
+      # if idx % 100 == 0:
+      #   tf.logging.info('On image %d of %d', idx, len(images))
       annotations_list = annotations_index[image['id']]
-      _, tf_example, num_annotations_skipped = create_tf_example(
-          image, annotations_list, image_dir, category_index, include_masks)
+      try:
+        _, tf_example, num_annotations_skipped = create_tf_example(
+            image, annotations_list, image_dir, category_index, include_masks)
+      except Exception as e:
+        skip_count += 1
+        print('==> Skipped image {}. Error {}'.format(image, e))
+        continue
+
       total_num_annotations_skipped += num_annotations_skipped
-      shard_idx = idx % num_shards
+      # shard_idx = idx % num_shards
+      shard_idx = (idx - skip_count) % num_shards
       output_tfrecords[shard_idx].write(tf_example.SerializeToString())
     tf.logging.info('Finished writing, skipped %d annotations.',
                     total_num_annotations_skipped)
@@ -266,20 +282,22 @@ def main(_):
       FLAGS.train_image_dir,
       train_output_path,
       FLAGS.include_masks,
-      num_shards=100)
+      num_shards=FLAGS.num_shards_train)
+  print('==> Done: train')
   _create_tf_record_from_coco_annotations(
       FLAGS.val_annotations_file,
       FLAGS.val_image_dir,
       val_output_path,
       FLAGS.include_masks,
-      num_shards=10)
-  _create_tf_record_from_coco_annotations(
-      FLAGS.testdev_annotations_file,
-      FLAGS.test_image_dir,
-      testdev_output_path,
-      FLAGS.include_masks,
-      num_shards=100)
-
+      num_shards=FLAGS.num_shards_val)
+  print('==> Done: val')
+  # _create_tf_record_from_coco_annotations(
+  #     FLAGS.testdev_annotations_file,
+  #     FLAGS.test_image_dir,
+  #     testdev_output_path,
+  #     FLAGS.include_masks,
+  #     num_shards=100)
+  # print('==> Done: test')
 
 if __name__ == '__main__':
   tf.app.run()

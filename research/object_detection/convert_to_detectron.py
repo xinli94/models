@@ -3,6 +3,7 @@ import os
 # import re
 import json
 import numpy as np
+from tqdm import tqdm
 
 # The output json format
 #-----------
@@ -34,12 +35,12 @@ def convert(input_file, training=True):
     images_id = 0
     prev = ''
     with open(input_file) as f:
-        for line in f:
+        for line in tqdm(f.readlines()):
             path,width,height,left,top,right,bottom,label = line.rstrip().split(',')
 
-            if path in BAD:
-                print('Found bad images')
-                continue
+            # if path in BAD:
+            #     print('Found bad images')
+            #     continue
          
             left = float(left)
             top = float(top)
@@ -62,7 +63,8 @@ def convert(input_file, training=True):
             filename = path.rsplit('/',1)[1]
 
             #update categories when we find a new one
-            if training and not np.any([label in x['name'] for x  in categories]):
+            # if training and not np.any([label in x['name'] for x in categories]):
+            if training and not np.any([label == x['name'] for x in categories]):
                 new_category = {}
                 new_category['id'] = categories_id
                 categories_id += 1
@@ -94,12 +96,18 @@ def convert(input_file, training=True):
             new_annotation['image_id'] = images_id
             new_annotation['bbox'] = [int(left),int(top),int(right - left),int(bottom - top)]
             new_annotation['category_id'] = get_category_id(label)
-
+            if new_annotation['category_id'] == None:
+                # print('>>>>>>>>>>>>>>>>', label, categories)
+                if training:
+                    raise Exception('Not all training categories are processed')
+                else:
+                    continue
 
             new_annotation['area'] = (bottom - top) * (right - left)
             new_annotation['ignore'] = 0    #ignore nothing!
             new_annotation['iscrowd'] = 0   #no crowds
             new_annotation['segmentation'] = [] #no segmentation; hope this works
+            # print('>>>>>>>>>>>>>>>>>', new_annotation)
             annotations.append(new_annotation)
             prev = filename
     return annotations,images 
@@ -114,15 +122,18 @@ root,ext = sys.argv[1].rsplit('.',1)
 with open(root + '.json','w') as f:
     json.dump(final_json, f)
 
-print("Converting test set...")
-#doesnt set categories
-annotations, images = convert(sys.argv[2],training=False)
 
-print("writing test json")
-final_json = {'annotations': annotations, 'categories': categories, 'images': images }
-root,ext = sys.argv[2].rsplit('.',1)
-with open(root + '.json','w') as f:
-    json.dump(final_json, f)
+if len(sys.argv) >= 3:
+    print("Converting test set...")
+    #doesnt set categories
+    annotations, images = convert(sys.argv[2],training=False)
+
+    print("writing test json")
+    final_json = {'annotations': annotations, 'categories': categories, 'images': images }
+    root,ext = sys.argv[2].rsplit('.',1)
+    with open(root + '.json','w') as f:
+        json.dump(final_json, f)
+
 
 with open(os.path.join(root.rsplit('/',1)[0], 'labels.pbtxt'), 'wa+') as f:
     for val in categories:
