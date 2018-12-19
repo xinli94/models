@@ -116,6 +116,9 @@ def _extract_predictions_and_losses(model,
         groundtruth_masks_list, groundtruth_keypoints_list)
     losses_dict.update(model.loss(prediction_dict, true_image_shapes))
 
+  # print('>>>>>>>>>>>>>>>>>> input_dict', input_dict)
+  # print('>>>>>>>>>>>>>>>>>>', fields.InputDataFields.filename)
+
   result_dict = eval_util.result_dict_for_single_example(
       original_image,
       input_dict[fields.InputDataFields.source_id],
@@ -124,7 +127,8 @@ def _extract_predictions_and_losses(model,
       groundtruth,
       class_agnostic=(
           fields.DetectionResultFields.detection_classes not in detections),
-      scale_to_absolute=True)
+      scale_to_absolute=True,
+      filename=input_dict[fields.InputDataFields.filename])
   return result_dict, losses_dict
 
 
@@ -153,7 +157,7 @@ def get_evaluators(eval_config, categories):
 
 
 def evaluate(create_input_dict_fn, create_model_fn, eval_config, categories,
-             checkpoint_dir, eval_dir, graph_hook_fn=None, evaluator_list=None):
+             checkpoint_dir, eval_dir, graph_hook_fn=None, evaluator_list=None, PER_IMAGE=False):
   """Evaluation function for detection models.
 
   Args:
@@ -276,6 +280,8 @@ def evaluate(create_input_dict_fn, create_model_fn, eval_config, categories,
       save_graph=eval_config.save_graph,
       save_graph_dir=(eval_dir if eval_config.save_graph else ''),
       losses_dict=losses_dict,
-      eval_export_path=eval_config.export_path)
+      eval_export_path=eval_config.export_path,
+      categories=categories,
+      PER_IMAGE=PER_IMAGE)
 
   return metrics

@@ -252,7 +252,7 @@ def _create_tf_record_from_coco_annotations(
             image, annotations_list, image_dir, category_index, include_masks)
       except Exception as e:
         skip_count += 1
-        print('==> Skipped image {}. Error {}'.format(image, e))
+        print('==> Skipped image {}.\n==> Error {}'.format(image, e))
         continue
 
       total_num_annotations_skipped += num_annotations_skipped

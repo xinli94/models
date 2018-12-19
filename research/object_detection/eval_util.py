@@ -34,6 +34,7 @@ from object_detection.utils import visualization_utils as vis_utils
 from object_detection.nms import gpu_nms
 from PIL import Image
 import pandas as pd
+import time
 
 slim = tf.contrib.slim
 
@@ -52,22 +53,47 @@ EVAL_DEFAULT_METRIC = 'coco_detection_metrics'
 ######################################################
 NMS_THRESH = 0.3
 OUTPUT_FILE = '/data5/xin/output.csv'
+TIME_FILE = '/data5/xin/time.csv'
+TIME_NMS_FILE = '/data5/xin/time_nms.csv'
+TIME_SESS_FILE = '/data5/xin/time_sess.csv'
+
+EVAL_IMAGE_PATH = '/data5/xin/logo2677/testing/'
 
 def run_nms(detection_boxes, detection_scores, detection_classes):
-  combined = sorted(zip(detection_boxes, detection_scores, detection_classes), key=lambda x:x[2])
+  # return detection_boxes, detection_scores, detection_classes
+
+  # combined = sorted(zip(detection_boxes, detection_scores, detection_classes), key=lambda x:x[2])
+  # combined = zip(detection_boxes, detection_scores, detection_classes)
+  # combined_map = collections.defaultdict(list)
+  # for box, score, classid in combined:
+  #   if score != 0:
+  #     combined_map[classid].append(list(box) + [score])
+
+  assert len(detection_boxes) == len(detection_scores) == len(detection_classes)
   combined_map = collections.defaultdict(list)
-  for box, score, classid in combined:
-    combined_map[classid].append(list(box) + [score])
+  n = len(detection_boxes)
+  for idx in range(n):
+    box, score, classid = detection_boxes[idx], detection_scores[idx], detection_classes[idx]
+    if score != 0:
+      combined_map[classid].append(list(box) + [score])
+
   # per class nms
+  tmp = time.time()
   result_detection_boxes, result_detection_scores, result_detection_classes = [], [], []
   for key, vals in combined_map.iteritems():
+    # vals.sort(key=lambda x: x[-1])
     vals = np.array(vals).astype(np.float32)
     keep = gpu_nms.gpu_nms(vals, NMS_THRESH)
+    # print('==> Skipped {} images'.format(len(vals) - len(keep)))
+
     vals = vals[keep, :]
     for val in vals:
       result_detection_boxes.append(val[:4])
       result_detection_scores.append(val[-1])
       result_detection_classes.append(int(key))
+  # print('==> Pure nms time {}'.format(time.time() - tmp))
+  with open(TIME_NMS_FILE, 'a') as f:
+    f.write(str(time.time() - tmp) + '\n')
   return np.array(result_detection_boxes), np.array(result_detection_scores), np.array(result_detection_classes)
 ######################################################
 
@@ -247,7 +273,9 @@ def _run_checkpoint_once(tensor_dict,
                          save_graph=False,
                          save_graph_dir='',
                          losses_dict=None,
-                         eval_export_path=None):
+                         eval_export_path=None,
+                         categories=None,
+                         PER_IMAGE=False):
   """Evaluates metrics defined in evaluators and returns summaries.
 
   This function loads the latest checkpoint in checkpoint_dirs and evaluates
@@ -299,6 +327,12 @@ def _run_checkpoint_once(tensor_dict,
       one element.
     ValueError: if save_graph is True and save_graph_dir is not defined.
   """
+
+  ######################################################
+  # Note(xin): quick hack for calculating inference time
+  if PER_IMAGE:
+    losses_dict = None
+
   if save_graph and not save_graph_dir:
     raise ValueError('`save_graph_dir` must be defined.')
   sess = tf.Session(master, graph=tf.get_default_graph())
@@ -320,13 +354,14 @@ def _run_checkpoint_once(tensor_dict,
   counters = {'skipped': 0, 'success': 0}
   aggregate_result_losses_dict = collections.defaultdict(list)
 
-  # categories_dict = {}
-  # for item in categories:
-  #   categories_dict[item['id']] = item['name']
+  categories_dict = {}
+  for item in categories:
+    categories_dict[item['id']] = item['name']
 
   with tf.contrib.slim.queues.QueueRunners(sess):
     try:
       for batch in range(int(num_batches)):
+        start_time = time.time()
         if (batch + 1) % 100 == 0:
           tf.logging.info('Running eval ops batch %d/%d', batch + 1,
                           num_batches)
@@ -346,29 +381,44 @@ def _run_checkpoint_once(tensor_dict,
               tensor_dict, sess, batch, counters, losses_dict=losses_dict)
         if not result_dict:
           continue
+        # print('==> Pure sess run time {}'.format(time.time() - start_time))
+        with open(TIME_SESS_FILE, 'a') as f:
+          f.write(str(time.time() - start_time) + '\n')
 
-        # ######################################################
-        # detection_boxes, detection_scores, detection_classes = run_nms(
-        # result_dict['detection_boxes'],
-        # result_dict['detection_scores'],
-        # result_dict['detection_classes'])
+        if 'filename' in result_dict and PER_IMAGE:
+          ######################################################
+          detection_boxes, detection_scores, detection_classes = run_nms(
+          result_dict['detection_boxes'],
+          result_dict['detection_scores'],
+          result_dict['detection_classes'])
 
-        # image_path = '/data1/xin/pipeline_brand_classifier/hive_test/data/' + result_dict['filename']
-        # image = Image.open(image_path)
-        # im_width, im_height = image.size
+          image_path = os.path.join(EVAL_IMAGE_PATH, result_dict['filename'])
+          image = Image.open(image_path)
+          im_width, im_height = image.size
 
-        # n = len(detection_scores)
-        # records = []
-        # for idx in range(n):
-        #   top, left, bottom, right = detection_boxes[idx]
-        #   score = detection_scores[idx]
-        #   classname = categories_dict[detection_classes[idx]]
-        #   records.append([image_path, 0, im_width, im_height, int(left), int(top), int(right), int(bottom), score, classname])
+          n = len(detection_scores)
+          records = []
+          for idx in range(n):
+            top, left, bottom, right = detection_boxes[idx]
+            score = float(detection_scores[idx])
+            if score == 0:
+              continue
 
-        # records_df = pd.DataFrame.from_records(records, columns=['path', 'timestamp', 'width', 'height', 'left', 'top', 'right', 'bottom', 'score', 'class'])
-        # records_df.to_csv(OUTPUT_FILE, mode='a', index=False, header=False)
-        # # print('>>>>>>>>>>>>>>>>> result_dict', result_dict)
-        # ######################################################
+            if categories_dict:
+              classname = categories_dict[detection_classes[idx]]
+            else:
+              # Note(xin): change classname back to class_id for now
+              classname = detection_classes[idx]
+
+            records.append([image_path, 0, im_width, im_height, int(left), int(top), int(right), int(bottom), score, classname])
+
+          with open(TIME_FILE, 'a') as f:
+            f.write(str(time.time() - start_time) + '\n')
+
+          records_df = pd.DataFrame.from_records(records, columns=['path', 'timestamp', 'width', 'height', 'left', 'top', 'right', 'bottom', 'score', 'class'])
+          records_df.to_csv(OUTPUT_FILE, mode='a', index=False, header=False)
+          # raise Exception('>>>>>>>>>>>>>>>>> result_dict', result_dict)
+          ######################################################
 
         for key, value in iter(result_losses_dict.items()):
           aggregate_result_losses_dict[key].append(value)
@@ -433,7 +483,9 @@ def repeated_checkpoint_run(tensor_dict,
                             save_graph=False,
                             save_graph_dir='',
                             losses_dict=None,
-                            eval_export_path=None):
+                            eval_export_path=None,
+                            categories=None,
+                            PER_IMAGE=False):
   """Periodically evaluates desired tensors using checkpoint_dirs or restore_fn.
 
   This function repeatedly loads a checkpoint and evaluates a desired
@@ -519,7 +571,9 @@ def repeated_checkpoint_run(tensor_dict,
           save_graph,
           save_graph_dir,
           losses_dict=losses_dict,
-          eval_export_path=eval_export_path)
+          eval_export_path=eval_export_path,
+          categories=categories,
+          PER_IMAGE=PER_IMAGE)
       write_metrics(metrics, global_step, summary_dir)
     number_of_evaluations += 1
 
@@ -569,7 +623,8 @@ def result_dict_for_single_example(image,
                                    detections,
                                    groundtruth=None,
                                    class_agnostic=False,
-                                   scale_to_absolute=False):
+                                   scale_to_absolute=False,
+                                   filename=None):
   """Merges all detection and groundtruth information for a single example.
 
   Note that evaluation tools require classes that are 1-indexed, and so this
@@ -642,9 +697,11 @@ def result_dict_for_single_example(image,
       groundtruth,
       class_agnostic,
       scale_to_absolute,
-      max_gt_boxes=max_gt_boxes)
+      max_gt_boxes=max_gt_boxes,
+      filenames=tf.expand_dims(filename, 0))
 
   exclude_keys = [
+      # fields.InputDataFields.filename,
       fields.InputDataFields.original_image,
       fields.DetectionResultFields.num_detections,
       fields.InputDataFields.num_groundtruth_boxes,
@@ -671,7 +728,8 @@ def result_dict_for_batched_example(images,
                                     class_agnostic=False,
                                     scale_to_absolute=False,
                                     original_image_spatial_shapes=None,
-                                    max_gt_boxes=None):
+                                    max_gt_boxes=None,
+                                    filenames=None):
   """Merges all detection and groundtruth information for a single example.
 
   Note that evaluation tools require classes that are 1-indexed, and so this
@@ -759,7 +817,7 @@ def result_dict_for_batched_example(images,
           '[batch_size, 2].')
 
   output_dict = {
-      # input_data_fields.filename: filename,
+      input_data_fields.filename: filenames,
       input_data_fields.original_image: images,
       input_data_fields.key: keys,
       input_data_fields.original_image_spatial_shape: (

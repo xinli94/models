@@ -77,8 +77,10 @@ flags.DEFINE_boolean(
     'run_once', False, 'Option to only run a single pass of '
     'evaluation. Overrides the `max_evals` parameter in the '
     'provided config.')
-FLAGS = flags.FLAGS
+flags.DEFINE_boolean(
+    'per_image', False, 'Option to output all detection boxes.')
 
+FLAGS = flags.FLAGS
 
 @tf.contrib.framework.deprecated(None, 'Use object_detection/model_main.py.')
 def main(unused_argv):
@@ -135,8 +137,8 @@ def main(unused_argv):
       categories,
       FLAGS.checkpoint_dir,
       FLAGS.eval_dir,
-      graph_hook_fn=graph_rewriter_fn)
-
+      graph_hook_fn=graph_rewriter_fn,
+      PER_IMAGE=FLAGS.per_image)
 
 if __name__ == '__main__':
   tf.app.run()

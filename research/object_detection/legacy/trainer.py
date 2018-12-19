@@ -62,8 +62,8 @@ def create_input_queue(batch_size_per_clone, create_tensor_dict_fn,
       tensor_dict[fields.InputDataFields.image], 0)
 
   images = tensor_dict[fields.InputDataFields.image]
-  print('>>>>>>>>>>>>>>>>>>> here IMAGE NAME': fields.InputDataFields.filename)
-  
+  # print('>>>>>>>>>>>>>>>>>>> here IMAGE NAME', fields.InputDataFields.filename)
+
   float_images = tf.to_float(images)
   tensor_dict[fields.InputDataFields.image] = float_images
 
